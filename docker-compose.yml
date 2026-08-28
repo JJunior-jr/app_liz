@@ -12,17 +12,6 @@ services:
       # Modificado para bind mount: facilita colocar o backup (baby_routine.db) na pasta ./data
       - ./data:/app/data
     restart: always
-    
-  docs:
-    image: node:lts
-    container_name: docs_baby_liz_routine
-    working_dir: /app/docs
-    volumes:
-      - .:/app
-    ports:
-      - "3002:3000"
-    command: npm start -- --host 0.0.0.0
-    restart: always
 
   db-manager:
     image: coleifer/sqlite-web
