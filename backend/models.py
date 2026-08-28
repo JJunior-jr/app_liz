@@ -46,6 +46,10 @@ class FeedingRecord(Base):
 
     # Breast
     breast_side: Mapped[str | None] = mapped_column("Breast_side", Enum(BreastSide), nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    duration_min: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class DiaperChange(Base):

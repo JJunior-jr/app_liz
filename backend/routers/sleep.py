@@ -1,5 +1,6 @@
 """Router de sono."""
 from datetime import date, datetime
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,13 +18,21 @@ router = APIRouter(prefix="/api/sleep", tags=["Sono"])
 
 @router.post("/start", response_model=SleepResponse, status_code=201)
 async def start_sleep(
+    target_date: Optional[date] = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> SleepRecord:
     """Inicia um registro de sono. Horário de início é automático (agora)."""
     now = datetime.now(ZoneInfo('America/Sao_Paulo'))
+    if target_date and target_date != now.date():
+        start_time = datetime.combine(target_date, now.time(), tzinfo=ZoneInfo('America/Sao_Paulo'))
+        db_date = target_date
+    else:
+        start_time = now
+        db_date = now.date()
+
     record = SleepRecord(
-        date=now.date(),
-        start_time=now,
+        date=db_date,
+        start_time=start_time,
         end_time=None,
         duration_min=None,
     )

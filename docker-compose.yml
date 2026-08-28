@@ -3,9 +3,9 @@ version: '3.8'
 services:
   api:
     build: .
-    container_name: app_baby_routine
+    container_name: app_baby_liz_routine
     ports:
-      - "8000:8000"
+      - "8002:8000"
     environment:
       - TZ=America/Sao_Paulo
     volumes:
@@ -15,33 +15,34 @@ services:
     
   docs:
     image: node:lts
-    container_name: docs_baby_routine
+    container_name: docs_baby_liz_routine
     working_dir: /app/docs
     volumes:
       - .:/app
     ports:
-      - "3000:3000"
+      - "3002:3000"
     command: npm start -- --host 0.0.0.0
     restart: always
 
   db-manager:
     image: coleifer/sqlite-web
-    container_name: baby_db_manager
+    container_name: baby_liz_db_manager
+    working_dir: /data
     ports:
-      - "8081:8080"
+      - "8082:8080"
     volumes:
       - ./data:/data
-    command: /data/baby_routine.db
+    command: sqlite_web baby_routine.db
     restart: always
 
   nginx-proxy:
     image: jc21/nginx-proxy-manager:latest
-    container_name: nginx_proxy_manager
+    container_name: nginx_liz_proxy_manager
     restart: always
     ports:
-      - "80:80"
-      - "81:81"
-      - "443:443"
+      - "8880:80"
+      - "8881:81"
+      - "8443:443"
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt

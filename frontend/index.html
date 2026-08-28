@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght=400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/style.css?v=7">
+  <link rel="stylesheet" href="/static/css/style.css?v=10">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -19,7 +19,7 @@
 
   <header class="app-header" role="banner">
     <h1 class="app-title">
-      🍼 App Rotina do João
+      🍼 App Rotina da Liz
       <span>Registro diário simplificado</span>
     </h1>
 
@@ -34,11 +34,6 @@
     <input type="date" id="date-picker-input"
       style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;" />
   </header>
-
-  <nav class="main-tabs" aria-label="Abas principais">
-    <button id="tab-daily" class="tab-btn active">Rotina Diária</button>
-    <button id="tab-reports" class="tab-btn">Relatórios</button>
-  </nav>
 
   <main class="main-content" role="main">
 
@@ -106,9 +101,6 @@
           <button id="btn-Breast-right" class="btn btn-outline">
             Peito D
           </button>
-          <button id="btn-Breast-both" class="btn btn-outline">
-            Ambos
-          </button>
         </div>
 
         <div class="ml-form" id="ml-form" role="group" aria-label="Registro de mamadeira">
@@ -147,6 +139,12 @@
               ✅ Registrar Mamadeira
             </button>
           </div>
+        </div>
+
+        <div class="breast-active-indicator" id="breast-active-indicator" role="status" aria-live="polite" style="display: none; margin-bottom: 16px;">
+          <div class="breast-dot" aria-hidden="true"></div>
+          <span id="breast-active-text">Amamentação em andamento...</span>
+          <button id="btn-breast-end" class="btn btn-danger btn-sm" style="margin-left: auto;">☀️ Finalizar</button>
         </div>
 
         <div class="records-list" id="feeding-list" aria-live="polite" style="display: none;">
@@ -317,7 +315,34 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/app.js?v=7"></script>
+  <!-- Drawer de Confirmação Retroativa -->
+  <div id="retroactive-drawer" class="drawer-overlay" style="display: none;">
+    <div class="drawer-content">
+      <div class="drawer-header">
+        <span class="drawer-indicator"></span>
+        <h3 class="drawer-title">⚠️ Registro Retroativo</h3>
+      </div>
+      <div class="drawer-body">
+        <p>Você está visualizando um dia que já passou (<strong id="retroactive-drawer-date">...</strong>).</p>
+        <p>Deseja registrar este evento retroativamente para esta data?</p>
+      </div>
+      <div class="drawer-actions">
+        <button id="btn-cancel-retroactive" class="btn btn-outline">Cancelar</button>
+        <button id="btn-confirm-retroactive" class="btn btn-primary">Sim, Registrar</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="main-tabs" aria-label="Navegação principal">
+    <button id="tab-daily" class="tab-btn active" role="tab" aria-selected="true" aria-controls="view-daily">
+      📋 Rotina
+    </button>
+    <button id="tab-reports" class="tab-btn" role="tab" aria-selected="false" aria-controls="view-reports">
+      📊 Relatórios
+    </button>
+  </nav>
+
+  <script type="module" src="/static/js/app.js?v=10"></script>
 
 </body>
 

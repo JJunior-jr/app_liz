@@ -1,5 +1,6 @@
 """Router de troca de fraldas."""
 from datetime import date, datetime
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,13 +19,21 @@ router = APIRouter(prefix="/api/diaper", tags=["Troca de Fralda"])
 @router.post("", response_model=DiaperResponse, status_code=201)
 async def create_diaper(
     payload: DiaperCreate,
+    target_date: Optional[date] = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> DiaperChange:
     """Registra uma troca de fralda. Horário é automático (agora)."""
     now = datetime.now(ZoneInfo('America/Sao_Paulo'))
+    if target_date and target_date != now.date():
+        recorded_at = datetime.combine(target_date, now.time(), tzinfo=ZoneInfo('America/Sao_Paulo'))
+        db_date = target_date
+    else:
+        recorded_at = now
+        db_date = now.date()
+
     record = DiaperChange(
-        recorded_at=now,
-        date=now.date(),
+        recorded_at=recorded_at,
+        date=db_date,
         has_poop=payload.has_poop,
         has_pee=payload.has_pee,
     )

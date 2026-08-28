@@ -1,5 +1,6 @@
 """Router de banho."""
 from datetime import date, datetime
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,13 +18,21 @@ router = APIRouter(prefix="/api/bath", tags=["Banho"])
 
 @router.post("", response_model=BathResponse, status_code=201)
 async def create_bath(
+    target_date: Optional[date] = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> BathRecord:
     """Registra um banho. Horário é automático (agora)."""
     now = datetime.now(ZoneInfo('America/Sao_Paulo'))
+    if target_date and target_date != now.date():
+        recorded_at = datetime.combine(target_date, now.time(), tzinfo=ZoneInfo('America/Sao_Paulo'))
+        db_date = target_date
+    else:
+        recorded_at = now
+        db_date = now.date()
+
     record = BathRecord(
-        recorded_at=now,
-        date=now.date(),
+        recorded_at=recorded_at,
+        date=db_date,
     )
     db.add(record)
     await db.flush()

@@ -33,15 +33,18 @@ async function apiFetch(path, options = {}) {
 export const api = {
   // Amamentação
   feeding: {
-    create: (payload) => apiFetch('/api/feeding', { method: 'POST', body: JSON.stringify(payload) }),
+    create: (payload, date) => apiFetch(date ? `/api/feeding?target_date=${date}` : '/api/feeding', { method: 'POST', body: JSON.stringify(payload) }),
     list:   (date)    => apiFetch(`/api/feeding?date=${date}`),
     update: (id, payload) => apiFetch(`/api/feeding/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     delete: (id)      => apiFetch(`/api/feeding/${id}`, { method: 'DELETE' }),
+    active: ()        => apiFetch('/api/feeding/active'),
+    start:  (payload, date) => apiFetch(date ? `/api/feeding/start?target_date=${date}` : '/api/feeding/start', { method: 'POST', body: JSON.stringify(payload) }),
+    end:    (id)      => apiFetch(`/api/feeding/${id}/end`, { method: 'PATCH' }),
   },
 
   // Troca de fralda
   diaper: {
-    create: (payload) => apiFetch('/api/diaper', { method: 'POST', body: JSON.stringify(payload) }),
+    create: (payload, date) => apiFetch(date ? `/api/diaper?target_date=${date}` : '/api/diaper', { method: 'POST', body: JSON.stringify(payload) }),
     list:   (date)    => apiFetch(`/api/diaper?date=${date}`),
     update: (id, payload) => apiFetch(`/api/diaper/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     delete: (id)      => apiFetch(`/api/diaper/${id}`, { method: 'DELETE' }),
@@ -49,7 +52,7 @@ export const api = {
 
   // Sono
   sleep: {
-    start:  ()            => apiFetch('/api/sleep/start', { method: 'POST' }),
+    start:  (date)        => apiFetch(date ? `/api/sleep/start?target_date=${date}` : '/api/sleep/start', { method: 'POST' }),
     end:    (id)          => apiFetch(`/api/sleep/${id}/end`, { method: 'PATCH' }),
     list:   (date)        => apiFetch(`/api/sleep?date=${date}`),
     active: ()            => apiFetch('/api/sleep/active'),
@@ -59,7 +62,7 @@ export const api = {
 
   // Banho
   bath: {
-    create: ()            => apiFetch('/api/bath', { method: 'POST' }),
+    create: (date)        => apiFetch(date ? `/api/bath?target_date=${date}` : '/api/bath', { method: 'POST' }),
     list:   (date)        => apiFetch(`/api/bath?date=${date}`),
     update: (id, payload) => apiFetch(`/api/bath/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     delete: (id)          => apiFetch(`/api/bath/${id}`, { method: 'DELETE' }),

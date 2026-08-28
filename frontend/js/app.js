@@ -9,6 +9,14 @@ Chart.register(ChartDataLabels);
 // ── Estado global ────────────────────────────────────────────────────────────
 let currentDate = new Date();
 let activeSleepId = null;
+let activeBreastId = null;
+
+// ── Utilitário de badge pop (Ant Design Mobile: Badge feedback) ───────────────
+function popBadge(el) {
+  el.classList.remove('pop');
+  void el.offsetWidth; // force reflow
+  el.classList.add('pop');
+}
 
 // ── Utilitários de data ───────────────────────────────────────────────────────
 function toISODate(d) {
@@ -52,6 +60,60 @@ function toast(msg, type = 'success') {
   setTimeout(() => el.remove(), 2600);
 }
 
+// ── Interceptador de Registros Retroativos (Drawer) ──────────────────────────
+let pendingAction = null;
+
+function isPastDate(d) {
+  const today = new Date();
+  const compareDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return compareDate < todayDate;
+}
+
+function executeOrConfirm(actionFn) {
+  if (isPastDate(currentDate)) {
+    pendingAction = actionFn;
+    document.getElementById('retroactive-drawer-date').textContent = formatDate(currentDate);
+    const drawer = document.getElementById('retroactive-drawer');
+    drawer.style.display = 'flex';
+    setTimeout(() => drawer.classList.add('visible'), 10);
+  } else {
+    actionFn(null);
+  }
+}
+
+function setupRetroactiveDrawer() {
+  const drawer = document.getElementById('retroactive-drawer');
+  const btnCancel = document.getElementById('btn-cancel-retroactive');
+  const btnConfirm = document.getElementById('btn-confirm-retroactive');
+
+  const closeDrawer = () => {
+    drawer.classList.remove('visible');
+    setTimeout(() => drawer.style.display = 'none', 300);
+    pendingAction = null;
+  };
+
+  btnCancel.addEventListener('click', closeDrawer);
+  
+  btnConfirm.addEventListener('click', async () => {
+    if (pendingAction) {
+      const targetDateStr = toISODate(currentDate);
+      const originalHtml = btnConfirm.innerHTML;
+      btnConfirm.disabled = true;
+      btnConfirm.innerHTML = '<span class="spinner"></span>';
+      try {
+        await pendingAction(targetDateStr);
+        closeDrawer();
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        btnConfirm.disabled = false;
+        btnConfirm.innerHTML = originalHtml;
+      }
+    }
+  });
+}
+
 // ── Navegação de datas ────────────────────────────────────────────────────────
 function updateDateLabel() {
   document.getElementById('current-date-label').textContent = formatDate(currentDate);
@@ -77,6 +139,77 @@ async function withLoading(btn, fn) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// ── Lógica de Amamentação Ativa (Peito) ──────────────────────────────────────
+function updateBreastUI(isActive, side = '') {
+  document.getElementById('btn-Breast-left').style.display = isActive ? 'none' : 'flex';
+  document.getElementById('btn-Breast-right').style.display = isActive ? 'none' : 'flex';
+  
+  const indicator = document.getElementById('breast-active-indicator');
+  indicator.classList.toggle('visible', isActive);
+  indicator.style.display = isActive ? 'flex' : 'none';
+  
+  if (isActive) {
+    const sideText = side === 'left' ? 'Peito Esquerdo' : 'Peito Direito';
+    document.getElementById('breast-active-text').textContent = `🤱 Amamentação no ${sideText} em andamento...`;
+  }
+}
+
+window.finishBreast = async (id) => {
+  try {
+    const record = await api.feeding.end(id);
+    const dur = formatDuration(record.duration_min);
+    if (activeBreastId === id) {
+      activeBreastId = null;
+      updateBreastUI(false);
+    }
+    toast(`🤱 Amamentação concluída! Duração: ${dur}.`);
+    await loadFeeding();
+    await updateSummary();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+};
+
+window.editBreast = async (id, startIsoStr, endIsoStr) => {
+  const regex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  const payload = {};
+
+  const startFormatted = formatTime(startIsoStr);
+  const newStartTime = prompt('Alterar horário de INÍCIO da amamentação (HH:MM):', startFormatted);
+
+  if (newStartTime && newStartTime !== startFormatted) {
+    if (!regex.test(newStartTime)) return toast('Formato inválido para início!', 'error');
+    const updatedStart = new Date(startIsoStr);
+    const [h, m] = newStartTime.split(':');
+    updatedStart.setHours(parseInt(h), parseInt(m));
+    payload.recorded_at = toLocalISOStringWithOffset(updatedStart);
+  }
+
+  if (endIsoStr && endIsoStr !== 'null' && endIsoStr !== 'undefined') {
+    const endFormatted = formatTime(endIsoStr);
+    const newEndTime = prompt('Alterar horário de TÉRMINO da amamentação (HH:MM):', endFormatted);
+
+    if (newEndTime && newEndTime !== endFormatted) {
+      if (!regex.test(newEndTime)) return toast('Formato inválido para término!', 'error');
+      const updatedEnd = new Date(endIsoStr);
+      const [h, m] = newEndTime.split(':');
+      updatedEnd.setHours(parseInt(h), parseInt(m));
+      payload.end_time = toLocalISOStringWithOffset(updatedEnd);
+    }
+  }
+
+  if (Object.keys(payload).length === 0) return;
+
+  try {
+    await api.feeding.update(id, payload);
+    toast('Horários de amamentação atualizados!');
+    await loadFeeding();
+    await updateSummary();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+};
+
 //  CARD: AMAMENTAÇÃO 🍼
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -122,7 +255,7 @@ function setupFeedingCard() {
   });
 
   // Confirmar mamadeira
-  document.getElementById('btn-bottle-confirm').addEventListener('click', async (e) => {
+  document.getElementById('btn-bottle-confirm').addEventListener('click', (e) => {
     const mlOffered = parseInt(document.getElementById('ml-offered-input').value);
     const mlConsumed = parseInt(document.getElementById('ml-consumed-input').value) || null;
 
@@ -131,38 +264,56 @@ function setupFeedingCard() {
       return;
     }
 
-    await withLoading(e.target, async () => {
-      await api.feeding.create({ feeding_type: 'bottle', ml_offered: mlOffered, ml_consumed: mlConsumed });
-      toast(`✅ Mamadeira ${mlOffered}ml registrada!`);
-      resetBottleForm();
-      await loadFeeding();
+    executeOrConfirm(async (targetDate) => {
+      await withLoading(e.target, async () => {
+        await api.feeding.create({ feeding_type: 'bottle', ml_offered: mlOffered, ml_consumed: mlConsumed }, targetDate);
+        toast(`✅ Mamadeira ${mlOffered}ml registrada!`);
+        resetBottleForm();
+        await loadFeeding();
+        await updateSummary();
+      });
     });
   });
 
-  // Breast esquerdo
-  document.getElementById('btn-Breast-left').addEventListener('click', async (e) => {
-    await withLoading(e.target, async () => {
-      await api.feeding.create({ feeding_type: 'Breast', breast_side: 'left' });
-      toast('✅ Peito esquerdo registrado!');
-      await loadFeeding();
+  // Peito esquerdo
+  document.getElementById('btn-Breast-left').addEventListener('click', (e) => {
+    executeOrConfirm(async (targetDate) => {
+      await withLoading(e.target, async () => {
+        const record = await api.feeding.start({ breast_side: 'left' }, targetDate);
+        activeBreastId = record.id;
+        toast('✅ Amamentação iniciada no peito esquerdo! 🤱');
+        updateBreastUI(true, 'left');
+        await loadFeeding();
+        await updateSummary();
+      });
     });
   });
 
-  // Breast direito
-  document.getElementById('btn-Breast-right').addEventListener('click', async (e) => {
-    await withLoading(e.target, async () => {
-      await api.feeding.create({ feeding_type: 'Breast', breast_side: 'right' });
-      toast('✅ Peito direito registrado!');
-      await loadFeeding();
+  // Peito direito
+  document.getElementById('btn-Breast-right').addEventListener('click', (e) => {
+    executeOrConfirm(async (targetDate) => {
+      await withLoading(e.target, async () => {
+        const record = await api.feeding.start({ breast_side: 'right' }, targetDate);
+        activeBreastId = record.id;
+        toast('✅ Amamentação iniciada no peito direito! 🤱');
+        updateBreastUI(true, 'right');
+        await loadFeeding();
+        await updateSummary();
+      });
     });
   });
 
-  // Ambos os Breasts
-  document.getElementById('btn-Breast-both').addEventListener('click', async (e) => {
+  // Finalizar amamentação
+  document.getElementById('btn-breast-end').addEventListener('click', async (e) => {
+    if (!activeBreastId) return;
     await withLoading(e.target, async () => {
-      await api.feeding.create({ feeding_type: 'Breast', breast_side: 'both' });
-      toast('✅ Ambos os peitos registrados!');
+      const record = await api.feeding.end(activeBreastId);
+      const dur = formatDuration(record.duration_min);
+      activeBreastId = null;
+      toast(`🤱 Amamentação concluída! Duração: ${dur}.`);
+      updateBreastUI(false);
       await loadFeeding();
+      await updateSummary();
     });
   });
 }
@@ -189,6 +340,7 @@ async function loadFeeding() {
   const badge = document.getElementById('feeding-badge');
 
   badge.textContent = records.length;
+  popBadge(badge);
 
   if (records.length === 0) {
     list.innerHTML = '<p class="empty-state">Nenhum registro hoje 🍼</p>';
@@ -207,19 +359,40 @@ async function loadFeeding() {
       }
       detail = `Mamadeira ${r.ml_offered}ml${consumed}${percentStr}`;
     } else {
-      const sideMap = { left: 'Peito Esquerdo 🤱', right: 'Peito Direito 🤱', both: 'Ambos os Peitos 🤱' };
+      const sideMap = { left: 'Peito Esquerdo', right: 'Peito Direito' };
       icon = '🤱';
-      detail = sideMap[r.breast_side] || 'Peito';
+      const sideName = sideMap[r.breast_side] || 'Peito';
+      if (r.end_time == null) {
+        detail = `${sideName} ⏳ em andamento`;
+      } else {
+        detail = `${sideName} (${formatDuration(r.duration_min)})`;
+      }
     }
     const off = r.ml_offered != null ? r.ml_offered : 'null';
     const cons = r.ml_consumed != null ? r.ml_consumed : 'null';
+
+    // Botão de finalizar na própria lista se for peito ativo
+    let finishBtn = '';
+    if (r.feeding_type !== 'bottle' && r.end_time == null) {
+      finishBtn = `<button class="record-edit-btn" onclick="finishBreast(${r.id})" title="Finalizar" style="color: var(--mint-700); font-weight: bold; opacity: 1; margin-left: 6px;">✔️ Concluir</button>`;
+    }
+
+    // Botão de editar horários: peito usa editBreast se concluído, mamadeira usa editFeeding
+    let editBtn = '';
+    if (r.feeding_type === 'bottle') {
+      editBtn = `<button class="record-edit-btn" onclick="editFeeding(${r.id}, '${r.recorded_at}', ${off}, ${cons})" title="Editar">✏️</button>`;
+    } else if (r.end_time != null) {
+      editBtn = `<button class="record-edit-btn" onclick="editBreast(${r.id}, '${r.recorded_at}', '${r.end_time}')" title="Editar horários">✏️</button>`;
+    }
+
     return `
       <div class="record-item" id="feed-${r.id}">
         <span class="record-icon">${icon}</span>
         <div class="record-info">
           <div class="record-time">
             ${formatTime(r.recorded_at)} 
-            <button class="record-edit-btn" onclick="editFeeding(${r.id}, '${r.recorded_at}', ${off}, ${cons})" title="Editar">✏️</button>
+            ${editBtn}
+            ${finishBtn}
           </div>
           <div class="record-detail">${detail}</div>
         </div>
@@ -291,27 +464,36 @@ window.deleteFeed = async (id) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 function setupDiaperCard() {
-  document.getElementById('btn-diaper-pee').addEventListener('click', async (e) => {
-    await withLoading(e.target, async () => {
-      await api.diaper.create({ has_pee: true, has_poop: false });
-      toast('✅ Xixi registrado! 💧');
-      await loadDiapers();
+  document.getElementById('btn-diaper-pee').addEventListener('click', (e) => {
+    executeOrConfirm(async (targetDate) => {
+      await withLoading(e.target, async () => {
+        await api.diaper.create({ has_pee: true, has_poop: false }, targetDate);
+        toast('✅ Xixi registrado! 💧');
+        await loadDiapers();
+        await updateSummary();
+      });
     });
   });
 
-  document.getElementById('btn-diaper-poop').addEventListener('click', async (e) => {
-    await withLoading(e.target, async () => {
-      await api.diaper.create({ has_pee: false, has_poop: true });
-      toast('✅ Cocô registrado! 💩');
-      await loadDiapers();
+  document.getElementById('btn-diaper-poop').addEventListener('click', (e) => {
+    executeOrConfirm(async (targetDate) => {
+      await withLoading(e.target, async () => {
+        await api.diaper.create({ has_pee: false, has_poop: true }, targetDate);
+        toast('✅ Cocô registrado! 💩');
+        await loadDiapers();
+        await updateSummary();
+      });
     });
   });
 
-  document.getElementById('btn-diaper-both').addEventListener('click', async (e) => {
-    await withLoading(e.target, async () => {
-      await api.diaper.create({ has_pee: true, has_poop: true });
-      toast('✅ Xixi + Cocô registrado!');
-      await loadDiapers();
+  document.getElementById('btn-diaper-both').addEventListener('click', (e) => {
+    executeOrConfirm(async (targetDate) => {
+      await withLoading(e.target, async () => {
+        await api.diaper.create({ has_pee: true, has_poop: true }, targetDate);
+        toast('✅ Xixi + Cocô registrado!');
+        await loadDiapers();
+        await updateSummary();
+      });
     });
   });
 }
@@ -323,6 +505,7 @@ async function loadDiapers() {
   const badge = document.getElementById('diaper-badge');
 
   badge.textContent = records.length;
+  popBadge(badge);
 
   if (records.length === 0) {
     list.innerHTML = '<p class="empty-state">Nenhuma troca hoje 👶</p>';
@@ -385,13 +568,16 @@ window.deleteDiaper = async (id) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 function setupSleepCard() {
-  document.getElementById('btn-sleep-start').addEventListener('click', async (e) => {
-    await withLoading(e.target, async () => {
-      const record = await api.sleep.start();
-      activeSleepId = record.id;
-      toast('😴 Hora de nanar! Soninho iniciado.');
-      updateSleepUI(true);
-      await loadSleeps();
+  document.getElementById('btn-sleep-start').addEventListener('click', (e) => {
+    executeOrConfirm(async (targetDate) => {
+      await withLoading(e.target, async () => {
+        const record = await api.sleep.start(targetDate);
+        activeSleepId = record.id;
+        toast('😴 Hora de nanar! Soninho iniciado.');
+        updateSleepUI(true);
+        await loadSleeps();
+        await updateSummary();
+      });
     });
   });
 
@@ -422,6 +608,7 @@ async function loadSleeps() {
   const badge = document.getElementById('sleep-badge');
 
   badge.textContent = records.length;
+  popBadge(badge);
 
   if (records.length === 0) {
     list.innerHTML = '<p class="empty-state">Nenhum sono registrado 😴</p>';
@@ -508,11 +695,14 @@ window.deleteSleep = async (id) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 function setupBathCard() {
-  document.getElementById('btn-bath').addEventListener('click', async (e) => {
-    await withLoading(e.target, async () => {
-      await api.bath.create();
-      toast('🛁 Banho registrado!');
-      await loadBaths();
+  document.getElementById('btn-bath').addEventListener('click', (e) => {
+    executeOrConfirm(async (targetDate) => {
+      await withLoading(e.target, async () => {
+        await api.bath.create(targetDate);
+        toast('🛁 Banho registrado!');
+        await loadBaths();
+        await updateSummary();
+      });
     });
   });
 }
@@ -524,6 +714,7 @@ async function loadBaths() {
   const badge = document.getElementById('bath-badge');
 
   badge.textContent = records.length;
+  popBadge(badge);
 
   if (records.length === 0) {
     list.innerHTML = '<p class="empty-state">Nenhum banho hoje 🛁</p>';
@@ -645,6 +836,16 @@ async function loadAll() {
     activeSleepId = null;
     updateSleepUI(false);
   }
+
+  // Verifica peito ativo
+  const activeBreast = await api.feeding.active();
+  if (activeBreast && activeBreast.id) {
+    activeBreastId = activeBreast.id;
+    updateBreastUI(true, activeBreast.breast_side);
+  } else {
+    activeBreastId = null;
+    updateBreastUI(false);
+  }
 }
 
 function setupToggleButtons() {
@@ -704,12 +905,12 @@ function renderCharts(data) {
         {
           label: 'Horas Acordado',
           data: chartData.map(d => parseFloat((d.total_awake_min / 60).toFixed(1))),
-          backgroundColor: '#86efac'
+          backgroundColor: '#fbcfe8'
         },
         {
           label: 'Horas de Sono',
           data: chartData.map(d => parseFloat((d.total_sleep_min / 60).toFixed(1))),
-          backgroundColor: '#38bdf8'
+          backgroundColor: '#a78bfa'
         }
       ]
     },
@@ -738,7 +939,7 @@ function renderCharts(data) {
         {
           label: 'Consumido (ml)',
           data: chartData.map(d => d.total_ml_consumed),
-          backgroundColor: '#0ea5e9'
+          backgroundColor: '#db2777'
         },
         {
           label: 'Não consumido (ml)',
@@ -845,18 +1046,22 @@ function setupTabs() {
 
   tabDaily.addEventListener('click', () => {
     tabDaily.classList.add('active');
+    tabDaily.setAttribute('aria-selected', 'true');
     tabReports.classList.remove('active');
+    tabReports.setAttribute('aria-selected', 'false');
     viewDaily.classList.add('active');
     viewReports.classList.remove('active');
-    document.querySelector('.app-header').style.display = 'block'; // mostra controle de data
+    document.querySelector('.app-header').style.display = 'block';
   });
 
   tabReports.addEventListener('click', () => {
     tabReports.classList.add('active');
+    tabReports.setAttribute('aria-selected', 'true');
     tabDaily.classList.remove('active');
+    tabDaily.setAttribute('aria-selected', 'false');
     viewReports.classList.add('active');
     viewDaily.classList.remove('active');
-    document.querySelector('.app-header').style.display = 'none'; // oculta controle de data
+    document.querySelector('.app-header').style.display = 'none';
     loadReports();
   });
 
@@ -873,6 +1078,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateDateLabel();
   setupTabs();
   setupToggleButtons();
+  setupRetroactiveDrawer();
 
   // Navegação de datas
   document.getElementById('btn-prev-day').addEventListener('click', () => navigate(-1));
